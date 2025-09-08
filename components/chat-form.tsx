@@ -48,6 +48,43 @@ interface ChatSession {
 export function ChatForm({ className, ...props }: React.ComponentProps<"form">) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const sourcesScrollRef = useRef<HTMLDivElement>(null)
+  const [isHoveringSource, setIsHoveringSource] = useState(false)
+  
+  // Mousewheel horizontal scrolling for sources
+  const handleSourcesWheel = (e: React.WheelEvent) => {
+    if (sourcesScrollRef.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      const scrollAmount = e.deltaY * 0.8
+      sourcesScrollRef.current.scrollLeft += scrollAmount
+    }
+  }
+  
+  // Alternative direct wheel handler
+  const handleDirectWheel = (e: WheelEvent) => {
+    if (isHoveringSource && sourcesScrollRef.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      const scrollAmount = e.deltaY * 0.8
+      sourcesScrollRef.current.scrollLeft += scrollAmount
+    }
+  }
+  
+  // Prevent page scroll when hovering over sources
+  useEffect(() => {
+    const sourcesElement = sourcesScrollRef.current
+    
+    if (sourcesElement && isHoveringSource) {
+      sourcesElement.addEventListener('wheel', handleDirectWheel, { passive: false })
+    }
+    
+    return () => {
+      if (sourcesElement) {
+        sourcesElement.removeEventListener('wheel', handleDirectWheel)
+      }
+    }
+  }, [isHoveringSource])
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [recognition, setRecognition] = useState<any>(null)
@@ -438,70 +475,69 @@ export function ChatForm({ className, ...props }: React.ComponentProps<"form">) 
           
           {/* Separate Sources Section */}
           {message.role === 'assistant' && message.sources && message.sources.length > 0 && (
-            <div className="self-start max-w-[80%] mt-3">
+            <div className="self-start max-w-[95%] mt-3">
               {/* Sources Header */}
               <div className="mb-2">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  � Sumber Dokumen ({message.sources.length} dari {message.total_sources})
+                  📚 Sumber Dokumen ({message.sources.length} dari {message.total_sources})
                 </h4>
               </div>
               
-              {/* Sources Grid */}
-              <div className="grid gap-2">
-                {message.sources.slice(0, 5).map((source, i) => {
-                  const scoreDisplay = typeof source.score === 'number' && !Number.isNaN(source.score)
-                    ? `${Math.round(source.score * 100)}%`
-                    : 'n/a'
-                  return (
-                    <div 
-                      key={i} 
-                      className="border border-border rounded-lg p-3 bg-card hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate" title={source.filename}>
-                            📄 {source.filename}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Relevansi: {scoreDisplay}
-                          </p>
+              {/* Horizontal Scrollable Sources */}
+              <div 
+                ref={sourcesScrollRef}
+                onWheel={handleSourcesWheel}
+                onMouseEnter={() => setIsHoveringSource(true)}
+                onMouseLeave={() => setIsHoveringSource(false)}
+                className="overflow-x-auto scrollbar-thin p-2 -m-2"
+                style={{ scrollBehavior: 'auto' }}
+              >
+                <div className="flex gap-3 pb-2 min-w-max">
+                  {message.sources.slice(0, 8).map((source, i) => {
+                    const scoreDisplay = typeof source.score === 'number' && !Number.isNaN(source.score)
+                      ? `${Math.round(source.score * 100)}%`
+                      : 'n/a'
+                    return (
+                      <div 
+                        key={i} 
+                        className="flex-shrink-0 w-72 border border-border rounded-lg p-3 bg-card hover:bg-accent/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate" title={source.filename}>
+                              📄 {source.filename}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Relevansi: {scoreDisplay}
+                            </p>
+                          </div>
                         </div>
+                        
+                        {source.content_preview && (
+                          <div className="mt-2 p-2 bg-muted/30 rounded text-xs text-muted-foreground">
+                            <p className="line-clamp-3">
+                              {source.content_preview.length > 180 
+                                ? `${source.content_preview.substring(0, 180)}...` 
+                                : source.content_preview
+                              }
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      
-                      {source.content_preview && (
-                        <div className="mt-2 p-2 bg-muted/30 rounded text-xs text-muted-foreground">
-                          <p className="line-clamp-2">
-                            {source.content_preview.length > 150 
-                              ? `${source.content_preview.substring(0, 150)}...` 
-                              : source.content_preview
-                            }
-                          </p>
-                        </div>
-                      )}
+                    )
+                  })}
+                  
+                  {message.sources.length > 8 && (
+                    <div className="flex-shrink-0 w-32 flex items-center justify-center border border-dashed border-muted-foreground/30 rounded-lg bg-muted/20">
+                      <div className="text-center py-4">
+                        <p className="text-xs text-muted-foreground">
+                          +{message.sources.length - 8} lainnya
+                        </p>
+                      </div>
                     </div>
-                  )
-                })}
-                
-                {message.sources.length > 5 && (
-                  <div className="text-center py-2">
-                    <p className="text-xs text-muted-foreground">
-                      +{message.sources.length - 5} dokumen lainnya tersedia
-                    </p>
-                  </div>
-                )}
-              </div>
-              
-              {/* Enhanced Features Tags */}
-              {message.enhanced_features && (
-                <div className="flex flex-wrap gap-1 mt-3 pt-2 border-t border-border">
-                  <span className="text-xs text-muted-foreground mr-2">Fitur:</span>
-                  {Object.entries(message.enhanced_features).filter(([,v]) => v).map(([k]) => (
-                    <span key={k} className="bg-primary/10 text-primary rounded-full px-2 py-1 text-xs font-medium">
-                      {k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                    </span>
-                  ))}
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
